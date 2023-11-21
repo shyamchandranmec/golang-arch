@@ -6,7 +6,9 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
+	"time"
 
+	"github.com/golang-jwt/jwt/v4"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -15,6 +17,21 @@ type person struct {
 }
 
 var key = [64]byte{}
+
+type UserClaims struct {
+	jwt.RegisteredClaims
+	SessionId int
+}
+
+func (u *UserClaims) Valid() error {
+	if !u.VerifyExpiresAt(time.Now(), true) {
+		return fmt.Errorf("token has expired")
+	}
+	if u.SessionId == 0 {
+		return fmt.Errorf("invalid sessin id")
+	}
+	return nil
+}
 
 func main() {
 	for i := 0; i < 64; i++ {
@@ -34,6 +51,11 @@ func main() {
 	}
 
 	log.Println("Logged in")
+	msg := "Shyam Message"
+	smsg, _ := signMessage([]byte(msg))
+	fmt.Println("Signed message is ", base64.StdEncoding.EncodeToString(smsg))
+	same, _ := checkSignature([]byte(msg), smsg)
+	fmt.Println("Check signature is ", same)
 }
 
 func hashPassword(password string) ([]byte, error) {
