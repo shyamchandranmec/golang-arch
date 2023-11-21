@@ -2,13 +2,17 @@ package main
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha512"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"log"
 	"time"
 
+	"github.com/Azure/azure-amqp-common-go/v3/uuid"
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -17,6 +21,8 @@ type person struct {
 }
 
 var key = [64]byte{}
+var keys = map[string]Key{}
+var currentKid = ""
 
 type UserClaims struct {
 	jwt.RegisteredClaims
@@ -74,7 +80,7 @@ func comparePassword(password string, hp []byte) error {
 }
 
 func signMessage(msg []byte) ([]byte, error) {
-	h := hmac.New(sha512.New, key[:])
+	h := hmac.New(sha512.New, keys[currentKid].key)
 	_, err := h.Write(msg)
 	if err != nil {
 		return nil, fmt.Errorf("error while signing message in sign Message %w", err)
@@ -94,9 +100,58 @@ func checkSignature(msg, sig []byte) (bool, error) {
 
 func CreateToken(c *UserClaims) (string, error) {
 	t := jwt.NewWithClaims(jwt.SigningMethodHS512, c)
-	signedToken, err := t.SignedString(key)
+	signedToken, err := t.SignedString(keys[currentKid].key)
 	if err != nil {
 		return "", fmt.Errorf("error in create token when signing token")
 	}
 	return signedToken, nil
+}
+
+type Key struct {
+	key     []byte
+	created time.Time
+}
+
+func generateNewKey() error {
+	newKey := make([]byte, 64)
+	_, err := io.ReadFull(rand.Reader, newKey)
+	if err != nil {
+		return fmt.Errorf("error in generating new key %w", err)
+	}
+	uid, err := uuid.NewV4()
+	if err != nil {
+		return fmt.Errorf("error in generating uuid %w", err)
+	}
+	keys[uid.String()] = Key{
+		key:     newKey,
+		created: time.Now(),
+	}
+	currentKid = uid.String()
+	return nil
+}
+
+func parseToken(token string) (*UserClaims, error) {
+	t, err := jwt.ParseWithClaims(token, &UserClaims{}, func(t *jwt.Token) (interface{}, error) {
+		if t.Method.Alg() != jwt.SigningMethodHS512.Alg() {
+			return nil, fmt.Errorf("invalid signing algorith")
+		}
+		kid, ok := t.Header["kid"].(string)
+		if !ok {
+			return nil, fmt.Errorf("Invalid key id")
+		}
+		k, ok := keys[kid]
+
+		if !ok {
+			return nil, fmt.Errorf("Invalid key id")
+		}
+		return k, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error in parsing token %w", err)
+	}
+	if !t.Valid {
+		return nil, fmt.Errorf("invalid token")
+	}
+	claims := t.Claims.(*UserClaims)
+	return claims, nil
 }
