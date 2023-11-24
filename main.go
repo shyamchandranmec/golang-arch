@@ -1,42 +1,49 @@
 package main
 
 import (
-	"crypto/sha256"
 	"fmt"
-	"log"
-	"os"
+	"io"
+	"net/http"
 )
 
+func getCode(msg string) string {
+
+}
+
 func main() {
-	file, err := os.Open("sample-file.txt")
-	if err != nil {
-		errx := fmt.Errorf("error in reading file %w", err)
-		log.Fatal(errx)
-	}
-	defer file.Close()
-	data := make([]byte, 100)
-	count, err := file.Read(data)
-	fmt.Printf("Read %d bytes:%q", count, data[:count])
-	fmt.Println()
-	h := sha256.New()
-	h.Write(data)
-	fmt.Printf("Here is the type Before sum %T", h)
-	fmt.Println()
-	xb := h.Sum(nil)
-	fmt.Printf("Here is the type after sum %T", xb)
-	fmt.Println()
-	fmt.Printf("xb is %x", xb)
-	fmt.Println()
+	http.HandleFunc("/submit", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+		email := r.FormValue("email")
+		if email == "" {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+		c := http.Cookie{
+			Name:  "session",
+			Value: "",
+		}
+	})
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		html := `<!DOCTYPE html>
+				<html>
+				<body>
 
-	xb = h.Sum(nil)
-	fmt.Printf("2 Here is the type after sum %T", xb)
-	fmt.Println()
-	fmt.Printf("2 xb is %x", xb)
-	fmt.Println()
+				<h1>My First Heading</h1>
+				<p>My first paragraph.</p>
+				<form method  = 'POST' action  = "/submit">
+					<input type = "email" name = "email" />
+					<input type = "submit"/>
+				</form>
 
-	xb = h.Sum(xb)
-	fmt.Printf("3 Here is the type after sum %T", xb)
-	fmt.Println()
-	fmt.Printf("3 xb is %x", xb)
-	fmt.Println()
+				</body>
+				</html>`
+		io.WriteString(w, html)
+
+	})
+	fmt.Print("before")
+	fmt.Println(http.ListenAndServe(":8000", nil))
+	fmt.Println("after")
 }
