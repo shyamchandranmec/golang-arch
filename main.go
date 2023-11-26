@@ -3,12 +3,35 @@ package main
 import (
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
+	"time"
+
+	"github.com/golang-jwt/jwt/v4"
 )
+
+type MyClaims struct {
+	Email string `json: email`
+	jwt.RegisteredClaims
+}
+
+var myKey = []byte("This is my new key")
+
+func getJWT(email string) string {
+	expTime := time.Now().Add(5 * time.Minute)
+	claims := &MyClaims{
+		Email: email,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expTime),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	ss, _ := token.SignedString(myKey)
+	fmt.Println("Generation jwt")
+	fmt.Printf("%v ", ss)
+	return ss
+}
 
 func getCode(msg string) []byte {
 	h := hmac.New(sha256.New, []byte("mykey"))
@@ -18,7 +41,7 @@ func getCode(msg string) []byte {
 	return code
 }
 
-var isEqual = false
+var isLoggedIn = false
 var formEmail = ""
 
 func main() {
@@ -33,26 +56,39 @@ func main() {
 			return
 		}
 		formEmail = email
-		code := getCode(email)
-		hexCode := fmt.Sprintf("%x", code)
 		cookie, err := r.Cookie("session")
 		if err != nil {
+			jwt := getJWT(email)
 			c := http.Cookie{
 				Name:  "session",
-				Value: hexCode + "|" + email,
+				Value: jwt,
 			}
-			fmt.Printf("Setting cookie ---> %s\n", c.Value)
+			fmt.Printf("\nSetting cookie ---> %s\n", c.Value)
+
 			http.SetCookie(w, &c)
+			isLoggedIn = true
 		} else {
 			fmt.Println("Cookie already present ", cookie.Value)
-			xs := strings.SplitN(cookie.Value, "|", 2)
-			if len(xs) == 2 {
-				cCode := xs[0]
-				data, _ := hex.DecodeString(cCode)
-				code := getCode(email)
-				fmt.Println("cCode is ", cCode)
-				fmt.Println("Code is ", code)
-				isEqual = hmac.Equal(data, code)
+			cjwt := cookie.Value
+			token, err := jwt.ParseWithClaims(cjwt, &MyClaims{}, func(t *jwt.Token) (interface{}, error) {
+				return []byte(myKey), nil
+			})
+			if err != nil {
+				fmt.Println("Token verification failed for cookie jwt ", err)
+				isLoggedIn = false
+			} else {
+				if token.Valid {
+					claims := token.Claims.(*MyClaims)
+					fmt.Println("Email in claim is ", claims.Email)
+					if claims.Email == email {
+						isLoggedIn = true
+					} else {
+						isLoggedIn = false
+					}
+				} else {
+					fmt.Println("Token is invalid")
+				}
+
 			}
 		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -64,29 +100,15 @@ func main() {
 		if err != nil {
 			fmt.Println("No cookie found")
 			c = &http.Cookie{}
-		} else {
-			fmt.Println("Foundn cookie %s", c.Value)
-			xs := strings.SplitN(c.Value, "|", 2)
-			if len(xs) == 2 {
-				cCode := xs[0]
-				code := getCode(formEmail)
-				data, _ := hex.DecodeString(cCode)
-				fmt.Printf("cCode is %x", data)
-				fmt.Printf("Code is   %x\n", code)
-
-				if hmac.Equal(data, code) {
-					isEqual = true
-					fmt.Println("Match found")
-					msg = "logged in"
-				} else {
-					fmt.Println("Match not found")
-				}
-			}
 		}
-		if isEqual {
-			fmt.Println("Is Equal ", isEqual)
+		if isLoggedIn {
+			fmt.Println("isLoggedIn ", isLoggedIn)
+			msg = "Logged in with same email"
 		} else {
-			fmt.Println("isEqual ", isEqual)
+			fmt.Println("isLoggedIn", isLoggedIn)
+			if formEmail == "" {
+				msg = "Please add email"
+			}
 		}
 		html := `<!DOCTYPE html>
 				<html>
