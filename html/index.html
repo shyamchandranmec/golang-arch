@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script>
+            function register() {
+                console.log("Sending register request")
+                fetch("/register", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        name: document.getElementById("rfname").value,
+                        username: document.getElementById("rusername").value,
+                        password: document.getElementById("rpassword").value,
+                    }),
+                    headers: {
+                        "Content-type": "application/json; charset=UTF-8"
+                    }
+                    }).then((response) => {response.json()})
+                    .then((json) => {
+                        console.log("Got response from register")
+                        console.log(json)
+                    });
+            }
+
+            function login() {
+                console.log("Sending login request")
+                fetch("/login", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        username: document.getElementById("lusername").value,
+                        password: document.getElementById("lpassword").value,
+                    }),
+                    headers: {
+                        "Content-type": "application/json; charset=UTF-8"
+                    }
+                    }).then((response) => {response.json()})
+                    .then((json) => {
+                        console.log("Got response from login")
+                        console.log(json)
+                    });
+            }
+        </script>
+    </head>
+<body>
+
+<h1>Register</h1>
+
+<form method="POST" onsubmit="return false">
+    <input type = "text" name = "name" placeholder="First name" id = "rfname"/>
+    <input type = "text" name = "username" placeholder="username" id = "rusername"/>
+    <input type  = "password" name="password" placeholder="password" id = "rpassword"/>
+    <input type = "submit" value="Register" onclick="register()"/>
+</form>
+
+<br>
+<br>
+
+<h2>Login</h2>
+<form method="POST" onsubmit="return false">
+    <input type = "text" name = "username" placeholder="username" id = "lusername"/>
+    <input type  = "password" name="password" placeholder="password" id = "lpassword"/>
+    <input type = "submit" value="Login" onclick="login()"/>
+</form>
+
+</body>
+</html>
